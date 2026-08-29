@@ -6,8 +6,12 @@
   "private": true,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "workspaces": ["web"],
   "scripts": {
     "chat": "tsx src/cli/chat.ts",
+    "api": "tsx src/api/server.ts",
+    "web:dev": "npm run dev --workspace=web",
+    "web:build": "npm run build --workspace=web",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"

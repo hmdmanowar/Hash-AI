@@ -8,6 +8,10 @@ export interface JarvisConfig {
   // user-configurable now (env var) and intended to become runtime-renamable
   // once the system is further along (see Jarvis.setAssistantName).
   assistantName: string
+  // Port for the local HTTP API (src/api/server.ts). Only ever bound to
+  // 127.0.0.1 — there's no auth yet, so this must never be exposed on the
+  // network.
+  apiPort: number
 }
 
 export function loadConfig(): JarvisConfig {
@@ -15,5 +19,6 @@ export function loadConfig(): JarvisConfig {
     ollamaHost: process.env.OLLAMA_HOST ?? 'http://localhost:11434',
     model: process.env.JARVIS_MODEL ?? 'qwen2.5-coder',
     assistantName: process.env.JARVIS_NAME ?? 'Jarvis',
+    apiPort: Number(process.env.JARVIS_API_PORT ?? 4000),
   }
 }
