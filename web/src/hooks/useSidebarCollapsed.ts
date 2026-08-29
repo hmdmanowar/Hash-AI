@@ -1,11 +1,6 @@
-import { useEffect, useState } from 'react'
+import { usePersistentToggle } from './usePersistentToggle'
 
 export function useSidebarCollapsed() {
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('jarvis-sidebar-collapsed') === 'true')
-
-  useEffect(() => {
-    localStorage.setItem('jarvis-sidebar-collapsed', String(collapsed))
-  }, [collapsed])
-
-  return { collapsed, toggle: () => setCollapsed((c) => !c) }
+  const { value: collapsed, toggle } = usePersistentToggle('jarvis-sidebar-collapsed')
+  return { collapsed, toggle }
 }

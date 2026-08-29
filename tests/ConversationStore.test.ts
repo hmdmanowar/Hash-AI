@@ -27,17 +27,43 @@ describe('ConversationStore', () => {
     expect(titles).toEqual(['First', 'Second'])
   })
 
-  it('appendMessage() + getMessages() preserves role, content, and order', () => {
+  it('appendMessage() + getMessages() preserves role, content, timestamp, and order', () => {
     const store = makeStore()
     const conversation = store.createConversation('Chat')
 
     store.appendMessage(conversation.id, { role: 'user', content: 'hi' })
     store.appendMessage(conversation.id, { role: 'assistant', content: 'hello!' })
 
-    expect(store.getMessages(conversation.id)).toEqual([
-      { role: 'user', content: 'hi' },
-      { role: 'assistant', content: 'hello!' },
-    ])
+    const messages = store.getMessages(conversation.id)
+    expect(messages).toHaveLength(2)
+    expect(messages[0]).toMatchObject({ role: 'user', content: 'hi' })
+    expect(messages[1]).toMatchObject({ role: 'assistant', content: 'hello!' })
+    expect(messages[0].createdAt).toBeTruthy()
+  })
+
+  it('appendMessage() with images persists them; getMessages() omits the field when absent', () => {
+    const store = makeStore()
+    const conversation = store.createConversation('Chat')
+
+    store.appendMessage(conversation.id, { role: 'user', content: 'what is this?', images: ['base64-a', 'base64-b'] })
+    store.appendMessage(conversation.id, { role: 'assistant', content: 'a cat' })
+
+    const messages = store.getMessages(conversation.id)
+    expect(messages[0].images).toEqual(['base64-a', 'base64-b'])
+    expect(messages[1].images).toBeUndefined()
+  })
+
+  it('truncate() drops everything from keepCount onward', () => {
+    const store = makeStore()
+    const conversation = store.createConversation('Chat')
+
+    store.appendMessage(conversation.id, { role: 'user', content: 'one' })
+    store.appendMessage(conversation.id, { role: 'assistant', content: 'two' })
+    store.appendMessage(conversation.id, { role: 'user', content: 'three' })
+
+    store.truncate(conversation.id, 1)
+
+    expect(store.getMessages(conversation.id).map((m) => m.content)).toEqual(['one'])
   })
 
   it('getMessages() returns an empty array for an unknown conversation', () => {

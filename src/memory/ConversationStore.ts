@@ -22,6 +22,11 @@ export interface ConversationRecord {
 export interface ConversationMessage {
   role: ConversationRole
   content: string
+  createdAt: string
+  // Base64-encoded images (no data-URI prefix) attached to this message —
+  // see AIModel.ts's ChatMessage. Absent (not an empty array) when the
+  // message has none.
+  images?: string[]
 }
 
 // Persists multiple conversations (each an ordered list of messages) for the
@@ -60,9 +65,20 @@ export class ConversationStore {
         conversation_id TEXT NOT NULL,
         role TEXT NOT NULL CHECK (role IN ('user','assistant')),
         content TEXT NOT NULL,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        images TEXT
       )
     `)
+    // Phase 5: retrofit the images column onto a database created before
+    // this field existed. No migration framework here (tables are just
+    // CREATE TABLE IF NOT EXISTS) and SQLite has no ADD COLUMN IF NOT
+    // EXISTS, so this just swallows the "duplicate column" error on a
+    // database that already has it.
+    try {
+      this.db.exec('ALTER TABLE conversation_messages ADD COLUMN images TEXT')
+    } catch {
+      // Already has the column.
+    }
     const row = this.db.prepare('SELECT MAX(seq) AS maxSeq FROM conversations').get() as { maxSeq: number | null }
     this.nextSeq = (row.maxSeq ?? 0) + 1
   }
@@ -85,16 +101,35 @@ export class ConversationStore {
 
   getMessages(conversationId: string): ConversationMessage[] {
     const rows = this.db
-      .prepare('SELECT role, content FROM conversation_messages WHERE conversation_id = ? ORDER BY id ASC')
-      .all(conversationId) as { role: ConversationRole; content: string }[]
-    return rows.map((row) => ({ role: row.role, content: row.content }))
+      .prepare('SELECT role, content, created_at, images FROM conversation_messages WHERE conversation_id = ? ORDER BY id ASC')
+      .all(conversationId) as { role: ConversationRole; content: string; created_at: string; images: string | null }[]
+    return rows.map((row) => ({
+      role: row.role,
+      content: row.content,
+      createdAt: row.created_at,
+      images: row.images ? (JSON.parse(row.images) as string[]) : undefined,
+    }))
+  }
+
+  // Deletes everything in the conversation from the (keepCount + 1)-th
+  // message onward — used when the user edits an earlier message: the
+  // edited message and everything after it (now stale) is dropped, then the
+  // edited text is sent as a fresh message appended right after keepCount.
+  truncate(conversationId: string, keepCount: number): void {
+    const rows = this.db
+      .prepare('SELECT id FROM conversation_messages WHERE conversation_id = ? ORDER BY id ASC')
+      .all(conversationId) as { id: number }[]
+    for (const row of rows.slice(keepCount)) {
+      this.db.prepare('DELETE FROM conversation_messages WHERE id = ?').run(row.id)
+    }
   }
 
   appendMessage(conversationId: string, message: ChatMessage & { role: ConversationRole }): void {
     const now = new Date().toISOString()
+    const images = message.images && message.images.length > 0 ? JSON.stringify(message.images) : null
     this.db
-      .prepare('INSERT INTO conversation_messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)')
-      .run(conversationId, message.role, message.content, now)
+      .prepare('INSERT INTO conversation_messages (conversation_id, role, content, created_at, images) VALUES (?, ?, ?, ?, ?)')
+      .run(conversationId, message.role, message.content, now, images)
     this.db
       .prepare('UPDATE conversations SET updated_at = ?, seq = ? WHERE id = ?')
       .run(now, this.nextSeq++, conversationId)

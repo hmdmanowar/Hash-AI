@@ -29,6 +29,11 @@ export interface JarvisConfig {
   // Where the web UI's multi-conversation history lives (see
   // memory/ConversationStore.ts). Web/API-layer only — the CLI doesn't use it.
   conversationsDbPath: string
+  // Phase 5: a separate multimodal model used only for turns that attach an
+  // image (see core/Jarvis.ts's visionModel option) — `model` stays the
+  // default for plain text since a coding-focused model is generally
+  // better at that than a vision-capable one.
+  visionModel: string
 }
 
 export function loadConfig(): JarvisConfig {
@@ -42,5 +47,6 @@ export function loadConfig(): JarvisConfig {
     auditLogPath: process.env.JARVIS_AUDIT_LOG ?? '.jarvis/audit.log',
     maxAgentSteps: Number(process.env.JARVIS_MAX_AGENT_STEPS ?? 5),
     conversationsDbPath: process.env.JARVIS_CONVERSATIONS_DB ?? '.jarvis/conversations.sqlite',
+    visionModel: process.env.JARVIS_VISION_MODEL ?? 'llava',
   }
 }

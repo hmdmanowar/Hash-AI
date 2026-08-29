@@ -21,8 +21,17 @@ const jarvis = new Jarvis(new OllamaModel(config.ollamaHost, config.model), {
   toolRegistry: new ToolRegistry(config.workspaceRoot),
   permissionEngine: new PermissionEngine(config.auditLogPath),
   maxAgentSteps: config.maxAgentSteps,
+  // Phase 5: a separate multimodal model, used only for a turn that
+  // attaches an image — see core/Jarvis.ts.
+  visionModel: new OllamaModel(config.ollamaHost, config.visionModel),
 })
 const conversationStore = new ConversationStore(config.conversationsDbPath)
+
+// No multipart upload here — images arrive inline as base64 in the JSON
+// body, so a generous but bounded cap keeps one oversized photo from
+// blowing up memory/DB size. ~8MB decoded, which is roughly this many
+// base64 characters (base64 is ~4/3 the size of the original bytes).
+const MAX_IMAGE_BASE64_LENGTH = 11_000_000
 
 // Which persisted conversation the single Jarvis instance's short-term
 // memory currently reflects — unset until the first message is sent (or
@@ -91,6 +100,26 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
+    const truncateMatch = pathname.match(/^\/api\/conversations\/([^/]+)\/truncate$/)
+    if (req.method === 'POST' && truncateMatch) {
+      const id = truncateMatch[1]
+      if (id === currentConversationId && jarvis.hasPendingToolCall()) {
+        send(res, 409, { error: 'Resolve the pending action (/approve or /deny) before editing a message.' })
+        return
+      }
+      const body = (await readJsonBody(req)) as { keepCount?: unknown }
+      if (typeof body.keepCount !== 'number' || body.keepCount < 0) {
+        send(res, 400, { error: 'Request body must include a non-negative "keepCount" number' })
+        return
+      }
+      conversationStore.truncate(id, body.keepCount)
+      if (id === currentConversationId) {
+        jarvis.loadHistory(conversationStore.getMessages(id))
+      }
+      send(res, 204)
+      return
+    }
+
     const conversationMatch = pathname.match(/^\/api\/conversations\/([^/]+)$/)
     if (req.method === 'PATCH' && conversationMatch) {
       const body = (await readJsonBody(req)) as { title?: unknown }
@@ -119,16 +148,29 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && pathname === '/api/chat') {
-      const body = (await readJsonBody(req)) as { message?: unknown }
+      const body = (await readJsonBody(req)) as { message?: unknown; images?: unknown }
       if (typeof body.message !== 'string' || !body.message.trim()) {
         send(res, 400, { error: 'Request body must include a non-empty "message" string' })
         return
       }
+      let images: string[] | undefined
+      if (body.images !== undefined) {
+        if (!Array.isArray(body.images) || !body.images.every((img) => typeof img === 'string' && img.length > 0)) {
+          send(res, 400, { error: 'Request body\'s "images" must be an array of non-empty base64 strings' })
+          return
+        }
+        if (body.images.some((img) => img.length > MAX_IMAGE_BASE64_LENGTH)) {
+          send(res, 400, { error: 'One of the attached images is too large (max ~8MB each)' })
+          return
+        }
+        images = body.images
+      }
+
       if (!currentConversationId) {
         currentConversationId = conversationStore.createConversation(autoTitle(body.message)).id
       }
-      conversationStore.appendMessage(currentConversationId, { role: 'user', content: body.message })
-      const reply = await jarvis.handleInput(body.message)
+      conversationStore.appendMessage(currentConversationId, { role: 'user', content: body.message, images })
+      const reply = await jarvis.handleInput(body.message, images)
       conversationStore.appendMessage(currentConversationId, { role: 'assistant', content: reply })
       send(res, 200, { reply, conversationId: currentConversationId })
       return

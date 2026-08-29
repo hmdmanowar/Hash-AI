@@ -3,6 +3,10 @@ export type ChatRole = 'system' | 'user' | 'assistant'
 export interface ChatMessage {
   role: ChatRole
   content: string
+  // Base64-encoded images (no data-URI prefix) attached to this message —
+  // matches Ollama's own /api/chat message schema, which OllamaModel.ts
+  // forwards this field to verbatim.
+  images?: string[]
 }
 
 export interface ModelRequest {

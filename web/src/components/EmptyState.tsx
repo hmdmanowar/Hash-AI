@@ -1,6 +1,7 @@
 import type { RefObject } from 'react'
 import { Composer } from './Composer'
 import { ComposeIcon, SearchIcon } from './icons'
+import type { MicControls } from '../types'
 
 export function EmptyState({
   input,
@@ -9,6 +10,10 @@ export function EmptyState({
   isSending,
   textareaRef,
   onApplySuggestion,
+  mic,
+  pendingImage,
+  onAttachImage,
+  onRemoveImage,
 }: {
   input: string
   onInputChange: (value: string) => void
@@ -16,11 +21,25 @@ export function EmptyState({
   isSending: boolean
   textareaRef: RefObject<HTMLTextAreaElement>
   onApplySuggestion: (starter: string) => void
+  mic: MicControls
+  pendingImage: string | undefined
+  onAttachImage: (file: File) => void
+  onRemoveImage: () => void
 }) {
   return (
     <div className="empty-state">
       <p className="empty-heading">How can I help you today?</p>
-      <Composer input={input} onInputChange={onInputChange} onSend={onSend} isSending={isSending} textareaRef={textareaRef} />
+      <Composer
+        input={input}
+        onInputChange={onInputChange}
+        onSend={onSend}
+        isSending={isSending}
+        textareaRef={textareaRef}
+        mic={mic}
+        pendingImage={pendingImage}
+        onAttachImage={onAttachImage}
+        onRemoveImage={onRemoveImage}
+      />
       <div className="suggestion-chips">
         {/* Mapped to real Jarvis capabilities only — no "Search the web" chip
             since there's no web-search tool, unlike a literal ChatGPT clone. */}

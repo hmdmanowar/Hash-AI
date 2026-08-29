@@ -331,8 +331,13 @@ describe('Jarvis', () => {
     it('stops at maxAgentSteps and reports back instead of looping forever', async () => {
       const sandbox = makeSandbox()
       try {
-        // Always requests another tool call — without a cap this would never terminate.
-        const model = new ScriptedModel(['TOOL_CALL: {"tool": "list_directory", "args": {}}'])
+        // Three distinct calls (not identical — that would trip the stuck-loop
+        // guard tested separately below) — without a cap this would never terminate.
+        const model = new ScriptedModel([
+          'TOOL_CALL: {"tool": "list_directory", "args": {}}',
+          'TOOL_CALL: {"tool": "search_code", "args": {"query": "a"}}',
+          'TOOL_CALL: {"tool": "search_code", "args": {"query": "b"}}',
+        ])
         const jarvis = new Jarvis(model, {
           toolRegistry: sandbox.toolRegistry,
           permissionEngine: sandbox.permissionEngine,
@@ -344,6 +349,30 @@ describe('Jarvis', () => {
         expect(reply).toContain("haven't finished")
         expect(jarvis.getLastTrace()).toHaveLength(3)
         expect(model.receivedRequests).toHaveLength(3)
+      } finally {
+        sandbox.cleanup()
+      }
+    })
+
+    it('stops early when the model repeats the exact same tool call instead of making progress', async () => {
+      const sandbox = makeSandbox()
+      try {
+        // Always requests the identical call — mirrors what a weaker local
+        // model did for a plain essay-writing request that needed no tool at
+        // all: it kept calling search_code/write_file with the same args
+        // instead of just answering in text.
+        const model = new ScriptedModel(['TOOL_CALL: {"tool": "search_code", "args": {"query": "india essay prompt"}}'])
+        const jarvis = new Jarvis(model, {
+          toolRegistry: sandbox.toolRegistry,
+          permissionEngine: sandbox.permissionEngine,
+          maxAgentSteps: 10,
+        })
+
+        const reply = await jarvis.chat('write an essay about India')
+
+        expect(reply).toContain('repeat the exact same')
+        expect(jarvis.getLastTrace()).toEqual([{ tool: 'search_code', outcome: 'success' }])
+        expect(model.receivedRequests).toHaveLength(2)
       } finally {
         sandbox.cleanup()
       }
@@ -448,6 +477,63 @@ describe('Jarvis', () => {
       } finally {
         sandbox.cleanup()
       }
+    })
+  })
+
+  describe('vision (Phase 5)', () => {
+    it('routes a turn with images to the vision model, not the default one', async () => {
+      const textModel = new MockModel()
+      const visionModel = new MockModel()
+      const jarvis = new Jarvis(textModel, { visionModel })
+
+      await jarvis.chat('what is in this photo?', ['base64-image-data'])
+
+      expect(visionModel.receivedRequests).toHaveLength(1)
+      expect(textModel.receivedRequests).toHaveLength(0)
+      const sentMessages = visionModel.receivedRequests[0].messages
+      const userMessage = sentMessages.find((m) => m.role === 'user')
+      expect(userMessage?.images).toEqual(['base64-image-data'])
+    })
+
+    it('routes a plain text turn to the default model, not the vision model', async () => {
+      const textModel = new MockModel()
+      const visionModel = new MockModel()
+      const jarvis = new Jarvis(textModel, { visionModel })
+
+      await jarvis.chat('hello')
+
+      expect(textModel.receivedRequests).toHaveLength(1)
+      expect(visionModel.receivedRequests).toHaveLength(0)
+    })
+
+    it('strips images from history before sending a later text-only turn to the non-vision model', async () => {
+      // Regression test: live testing showed Ollama hard-errors on ANY
+      // request carrying an `images` field for a model that doesn't
+      // support it — not just ignoring it — so once an image had ever
+      // been sent, every later plain-text turn broke for good unless
+      // history is sanitized per-model.
+      const textModel = new MockModel()
+      const visionModel = new MockModel()
+      const jarvis = new Jarvis(textModel, { visionModel })
+
+      await jarvis.chat('what is in this photo?', ['base64-image-data'])
+      await jarvis.chat('thanks, unrelated: what is 2+2?')
+
+      const secondRequest = textModel.receivedRequests[0].messages
+      expect(secondRequest.some((m) => m.images !== undefined)).toBe(false)
+      // Content survives the strip — only the images field is dropped.
+      const oldUserMessage = secondRequest.find((m) => m.content === 'what is in this photo?')
+      expect(oldUserMessage).toBeDefined()
+    })
+
+    it('falls back to the default model for images when no vision model is configured', async () => {
+      const textModel = new MockModel()
+      const jarvis = new Jarvis(textModel)
+
+      const reply = await jarvis.chat('what is this?', ['base64-image-data'])
+
+      expect(textModel.receivedRequests).toHaveLength(1)
+      expect(reply).toBe('echo: what is this?')
     })
   })
 })

@@ -15,6 +15,8 @@ export interface ConversationSummary {
 export interface ConversationMessage {
   role: 'user' | 'assistant'
   content: string
+  createdAt: string
+  images?: string[]
 }
 
 async function errorFromResponse(res: Response, fallback: string): Promise<Error> {
@@ -28,11 +30,11 @@ export async function fetchInfo(): Promise<JarvisInfo> {
   return res.json()
 }
 
-export async function sendMessage(message: string): Promise<{ reply: string; conversationId: string }> {
+export async function sendMessage(message: string, images?: string[]): Promise<{ reply: string; conversationId: string }> {
   const res = await fetch(`${API_BASE}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, images }),
   })
   if (!res.ok) throw await errorFromResponse(res, `Request failed (${res.status})`)
   return res.json()
@@ -72,4 +74,13 @@ export async function renameConversation(id: string, title: string): Promise<voi
 export async function deleteConversation(id: string): Promise<void> {
   const res = await fetch(`${API_BASE}/api/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' })
   if (!res.ok) throw await errorFromResponse(res, `Could not delete conversation (${res.status})`)
+}
+
+export async function truncateConversation(id: string, keepCount: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/conversations/${encodeURIComponent(id)}/truncate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ keepCount }),
+  })
+  if (!res.ok) throw await errorFromResponse(res, `Could not update conversation (${res.status})`)
 }
