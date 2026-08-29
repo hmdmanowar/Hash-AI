@@ -22,6 +22,10 @@ export interface JarvisConfig {
   // Append-only audit log of every tool action taken (see
   // permissions/PermissionEngine.ts).
   auditLogPath: string
+  // Phase 4: hard cap on how many tool calls the model may chain in one
+  // turn before it must stop and report back (see core/Jarvis.ts's
+  // runAgentLoop). A safety bound, not a suggestion.
+  maxAgentSteps: number
 }
 
 export function loadConfig(): JarvisConfig {
@@ -33,5 +37,6 @@ export function loadConfig(): JarvisConfig {
     memoryDbPath: process.env.JARVIS_MEMORY_DB ?? '.jarvis/memory.sqlite',
     workspaceRoot: process.env.JARVIS_WORKSPACE_ROOT ?? '.jarvis/workspace',
     auditLogPath: process.env.JARVIS_AUDIT_LOG ?? '.jarvis/audit.log',
+    maxAgentSteps: Number(process.env.JARVIS_MAX_AGENT_STEPS ?? 5),
   }
 }

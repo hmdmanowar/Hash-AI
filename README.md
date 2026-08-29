@@ -4,7 +4,7 @@ An independent, model-agnostic AI agent runtime. Jarvis is a standalone product 
 
 This repo has no dependency on, and must never import from, the Hash Playground codebase.
 
-## Status: v0.1 (Foundation + Brain) + Phase 2 (Memory) + Phase 3 (Tools) + a web UI
+## Status: v0.1 (Foundation + Brain) + Phase 2 (Memory) + Phase 3 (Tools) + Phase 4 (Agent) + a web UI
 
 Done:
 - Standalone TypeScript project, own git repo
@@ -13,12 +13,13 @@ Done:
 - Basic multi-turn conversation (`src/core/Jarvis.ts`)
 - Short-term (in-process) conversation memory (`src/memory/ShortTermMemory.ts`)
 - **Persistent, user-controlled long-term memory** (`src/memory/LongTermMemory.ts`) — SQLite-backed (Node's built-in `node:sqlite`, no extra dependency), with keyword-overlap relevance retrieval fed back into every chat turn. Only written when you explicitly ask via `/remember` — never auto-extracted.
-- **Real tools, sandboxed, behind an enforced Permission Engine** (`src/tools/`, `src/permissions/PermissionEngine.ts`) — `read_file`, `list_directory`, `write_file`, `search_code`, and `run_command`, all confined to a workspace root (`.jarvis/workspace/` by default) that no path can escape. Each tool has a fixed risk level (low/medium/high); low and medium run automatically, high (currently just `run_command`) always requires you to `/approve` or `/deny` it first. Every action — automatic or approved — is written to an append-only audit log (`.jarvis/audit.log`). This is **single-shot** tool use: the model can request one tool per turn, see the result, then must answer — not open-ended autonomous chaining. That's Phase 4.
+- **Real tools, sandboxed, behind an enforced Permission Engine** (`src/tools/`, `src/permissions/PermissionEngine.ts`) — `read_file`, `list_directory`, `write_file`, `search_code`, and `run_command`, all confined to a workspace root (`.jarvis/workspace/` by default) that no path can escape. Each tool has a fixed risk level (low/medium/high); low and medium run automatically, high (currently just `run_command`) always requires you to `/approve` or `/deny` it first. Every action — automatic or approved — is written to an append-only audit log (`.jarvis/audit.log`).
+- **Multi-step agent loop** (`src/core/Jarvis.ts`) — the model can chain several tool calls toward a goal within one turn (e.g. "list the workspace, then read hello.txt and summarize it"), instead of needing a separate prompt per step. Bounded by a per-turn step cap (`maxAgentSteps`, default 5, `JARVIS_MAX_AGENT_STEPS`) — not open-ended autonomy or a background loop (that's Phase 8). A high-risk step in the middle of a plan still pauses for `/approve`/`/deny`, and approving resumes the same plan with its remaining step budget rather than starting over. `jarvis.getLastTrace()` returns the tool/outcome sequence for the most recent turn. The tool-call parser only ever executes the first well-formed call in a reply and discards anything after it — live testing against the local model showed it can sometimes string multiple `TOOL_CALL` lines together or fabricate fake results in trailing text instead of stopping after one call as instructed, so the loop treats only the first call as real and lets the model see the genuine result next.
 - Persistent configuration via `.env` (`src/config/config.ts`)
 - Tests (using a mock model, no Ollama dependency) and a CLI to try it for real
 - A local HTTP API (`src/api/server.ts`, 127.0.0.1 only, no auth) and a React web chat UI (`web/`)
 
-Not started yet (later phases): multi-step autonomous agent loop, vision, voice, autonomous developer mode (branches/builds/self-review), multi-agent roles, and 24/7 autonomous operation.
+Not started yet (later phases): vision, voice, autonomous developer mode (branches/builds/self-review), multi-agent roles, and 24/7 autonomous operation.
 
 ## Setup
 

@@ -13,6 +13,7 @@ async function main() {
     longTermMemory: new LongTermMemory(config.memoryDbPath),
     toolRegistry: new ToolRegistry(config.workspaceRoot),
     permissionEngine: new PermissionEngine(config.auditLogPath),
+    maxAgentSteps: config.maxAgentSteps,
   })
   const label = jarvis.getAssistantName().toLowerCase()
 

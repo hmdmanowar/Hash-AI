@@ -19,6 +19,7 @@ const jarvis = new Jarvis(new OllamaModel(config.ollamaHost, config.model), {
   longTermMemory: new LongTermMemory(config.memoryDbPath),
   toolRegistry: new ToolRegistry(config.workspaceRoot),
   permissionEngine: new PermissionEngine(config.auditLogPath),
+  maxAgentSteps: config.maxAgentSteps,
 })
 
 function send(res: http.ServerResponse, status: number, body?: unknown) {
