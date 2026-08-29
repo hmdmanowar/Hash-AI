@@ -15,6 +15,13 @@ export interface JarvisConfig {
   // Where persistent long-term memory lives (see memory/LongTermMemory.ts).
   // Relative to wherever the process is started from.
   memoryDbPath: string
+  // Phase 3: the sandbox root every file/terminal tool is confined to (see
+  // tools/sandbox.ts) — never anywhere outside this directory, regardless
+  // of what path the model asks for.
+  workspaceRoot: string
+  // Append-only audit log of every tool action taken (see
+  // permissions/PermissionEngine.ts).
+  auditLogPath: string
 }
 
 export function loadConfig(): JarvisConfig {
@@ -24,5 +31,7 @@ export function loadConfig(): JarvisConfig {
     assistantName: process.env.JARVIS_NAME ?? 'Jarvis',
     apiPort: Number(process.env.JARVIS_API_PORT ?? 4000),
     memoryDbPath: process.env.JARVIS_MEMORY_DB ?? '.jarvis/memory.sqlite',
+    workspaceRoot: process.env.JARVIS_WORKSPACE_ROOT ?? '.jarvis/workspace',
+    auditLogPath: process.env.JARVIS_AUDIT_LOG ?? '.jarvis/audit.log',
   }
 }

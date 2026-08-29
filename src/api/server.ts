@@ -2,17 +2,23 @@ import http from 'node:http'
 import { loadConfig } from '../config/config.js'
 import { OllamaModel } from '../models/OllamaModel.js'
 import { LongTermMemory } from '../memory/LongTermMemory.js'
+import { ToolRegistry } from '../tools/registry.js'
+import { PermissionEngine } from '../permissions/PermissionEngine.js'
 import { Jarvis } from '../core/Jarvis.js'
 
 // A plain node:http server — no framework dependency, matching the
 // roadmap's own tech direction ("Node HTTP API; streaming later"). This is
 // a local personal-assistant tool with no authentication yet, so it must
 // only ever bind to 127.0.0.1, never 0.0.0.0 — never expose this on a
-// network.
+// network. That matters more now than it did before Phase 3: this process
+// can execute shell commands and write files (sandboxed, and gated by
+// PermissionEngine) — reachability from anywhere but localhost is not okay.
 const config = loadConfig()
 const jarvis = new Jarvis(new OllamaModel(config.ollamaHost, config.model), {
   assistantName: config.assistantName,
   longTermMemory: new LongTermMemory(config.memoryDbPath),
+  toolRegistry: new ToolRegistry(config.workspaceRoot),
+  permissionEngine: new PermissionEngine(config.auditLogPath),
 })
 
 function send(res: http.ServerResponse, status: number, body?: unknown) {
