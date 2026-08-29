@@ -1,4 +1,4 @@
-import type { AIModel } from '../models/AIModel.js'
+import type { AIModel, ChatMessage } from '../models/AIModel.js'
 import { ShortTermMemory } from '../memory/ShortTermMemory.js'
 import { LongTermMemory, type MemoryRecord } from '../memory/LongTermMemory.js'
 import type { ToolRegistry } from '../tools/registry.js'
@@ -193,6 +193,18 @@ export class Jarvis {
 
   reset(): void {
     this.memory.clear()
+    this.pendingToolCall = undefined
+    this.lastTrace = []
+  }
+
+  // Replaces short-term memory with the given history and no model calls —
+  // used by the web API to restore a persisted conversation when the user
+  // switches to it (see src/memory/ConversationStore.ts). Also clears
+  // pending/trace state like reset() so this is self-contained regardless
+  // of what the instance was doing beforehand.
+  loadHistory(messages: ChatMessage[]): void {
+    this.memory.clear()
+    for (const message of messages) this.memory.append(message)
     this.pendingToolCall = undefined
     this.lastTrace = []
   }

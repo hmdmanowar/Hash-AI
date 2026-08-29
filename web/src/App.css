@@ -4,7 +4,7 @@
   --bg-elevated: #eceefa;
   --border: #dfe2f0;
   --text: #1e2233;
-  --text-muted: #6b7089;
+  --text-muted: #545a75;
   --accent: #4f5fd6;
   --accent-contrast: #ffffff;
   --user-bubble: #e9ebf8;
@@ -30,6 +30,32 @@
   box-sizing: border-box;
 }
 
+/* Theme-aware scrollbars (--text-muted/--bg-sidebar already track light/dark) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-muted) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-muted);
+}
+
 body {
   margin: 0;
   font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
@@ -51,13 +77,53 @@ body {
   display: flex;
   flex-direction: column;
   padding: 16px 14px;
+  overflow: hidden;
+  transition: width 0.18s ease, padding 0.18s ease;
+}
+
+/* Collapsed state stays a slim, visible icon rail (toggle + new-chat) — it
+   never shrinks away to nothing. */
+.sidebar.collapsed {
+  width: 56px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 2px 14px;
+  justify-content: space-between;
+}
+
+.sidebar.collapsed .sidebar-header {
+  justify-content: center;
+}
+
+.sidebar-toggle {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-toggle:hover {
+  color: var(--text);
+  background: var(--bg-elevated);
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 4px 18px;
+  min-width: 0;
 }
 
 .brand-mark {
@@ -65,29 +131,136 @@ body {
   height: 28px;
   border-radius: 8px;
   object-fit: cover;
+  display: block;
+  flex-shrink: 0;
+}
+
+.new-chat-icon {
+  flex-shrink: 0;
+  align-self: center;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  cursor: pointer;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.new-chat-icon:hover {
+  background: var(--bg-elevated);
 }
 
 .brand-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 600;
   font-size: 15px;
 }
 
+/* Looks exactly like a .conversation-item row (same class) — no border or
+   distinct button styling of its own, just a bit of extra weight on the text. */
 .new-chat {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  width: 100%;
   background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: 10px;
-  padding: 9px 12px;
-  font-size: 13.5px;
-  cursor: pointer;
+  border: none;
+  font-family: inherit;
+  font-weight: 500;
   text-align: left;
+  font-size: 14px;
+  margin-top: 10px;
 }
 
-.new-chat:hover {
+.conversation-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+.conversation-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.conversation-item:hover {
   background: var(--bg-elevated);
+}
+
+.conversation-item.active {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.conversation-item-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.conversation-item-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 4px;
+  /* Reserve the space always (instead of display:none/flex on hover) so
+     revealing the icons doesn't change the row's layout width — that
+     reflow was shrinking the title's hover target out from under the
+     cursor and causing the icons to flicker in and out on hover. */
+  visibility: hidden;
+}
+
+.conversation-item:hover .conversation-item-actions {
+  visibility: visible;
+}
+
+.conversation-item-actions button {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+}
+
+.conversation-item-actions button:hover {
+  color: var(--text);
+}
+
+/* Replaces just the title span in place, inside the same unchanged row
+   container — so editing never resizes or shifts the row. No border or
+   background of its own; the blinking text caret is the only affordance
+   that it's editable. */
+.conversation-item-edit {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  padding: 0;
+  margin: 0;
+  font-size: 13px;
+  font-family: inherit;
+  caret-color: var(--accent);
 }
 
 .sidebar-footer {
@@ -128,23 +301,54 @@ body {
 }
 
 .empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
   max-width: 640px;
-  margin: 12vh auto 0;
+  width: 100%;
+  margin: 0 auto;
+  padding: 20px;
   text-align: center;
-  color: var(--text-muted);
 }
 
-.empty-mark {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  object-fit: cover;
-  margin-bottom: 14px;
-}
-
-.empty-state p {
-  font-size: 15px;
+.empty-heading {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
   margin: 0;
+}
+
+.empty-state .composer {
+  padding: 0;
+  margin: 0;
+}
+
+.suggestion-chips {
+  display: flex;
+  /* flex-direction: column; */
+  align-items: center;
+  gap: 10px;
+}
+
+.suggestion-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 14px;
+  font-family: inherit;
+  padding: 7px 10px;
+  border-radius: 8px;
+}
+
+.suggestion-chip:hover {
+  background: var(--bg-elevated);
 }
 
 .row {
@@ -289,35 +493,95 @@ body {
   width: 100%;
   margin: 0 auto;
   padding: 12px 20px 24px;
-  display: flex;
-  gap: 10px;
-  align-items: center;
 }
 
-.composer textarea {
-  flex: 1;
-  resize: none;
-  max-height: 200px;
+.composer-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
+  border-radius: 26px;
+  padding: 6px 8px 6px 14px;
+}
+
+.composer-bar:focus-within {
+  border-color: var(--accent);
+}
+
+.composer-bar textarea {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  max-height: 200px;
+  background: transparent;
+  border: none;
+  outline: none;
   color: var(--text);
-  border-radius: 16px;
-  padding: 12px 16px;
+  padding: 8px 0;
   font-size: 14.5px;
   font-family: inherit;
   line-height: 1.5;
   overflow: hidden;
 }
 
-.composer textarea:focus {
-  outline: none;
-  border-color: var(--accent);
+.composer-right {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.composer button {
+.composer-icon-btn {
   flex-shrink: 0;
-  width: 38px;
-  height: 38px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.composer-icon-btn:hover:not(:disabled) {
+  background: var(--border);
+  color: var(--text);
+}
+
+.composer-pill-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.composer-pill-btn:hover:not(:disabled) {
+  background: var(--border);
+  color: var(--text);
+}
+
+.composer-icon-btn:disabled,
+.composer-pill-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.composer-send {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   background: var(--accent);
   color: var(--accent-contrast);
@@ -329,7 +593,76 @@ body {
   justify-content: center;
 }
 
-.composer button:disabled {
+.composer-send:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* ---------- modal ---------- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+}
+
+.modal {
+  width: 100%;
+  max-width: 360px;
+  margin: 0 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+
+.modal-title {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.modal-message {
+  margin: 0 0 20px;
+  font-size: 13.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.modal-cancel,
+.modal-confirm {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.modal-cancel {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.modal-cancel:hover {
+  background: var(--bg-elevated);
+}
+
+.modal-confirm {
+  background: #e05b4c;
+  color: #ffffff;
+}
+
+.modal-confirm:hover {
+  background: #c94a3c;
 }

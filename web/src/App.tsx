@@ -1,87 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
-import { fetchInfo, sendMessage, resetConversation, type JarvisInfo } from './api'
-
-interface Message {
-  role: 'user' | 'assistant'
-  content: string
-}
-
-type ContentSegment = { type: 'text'; text: string } | { type: 'code'; lang: string; code: string }
-
-// Splits on fenced ```lang\ncode``` blocks so code can get its own
-// monospace block with a copy button, instead of dumping everything as one
-// plain-text blob — the single highest-value bit of "message formatting"
-// for a coding-focused model, without pulling in a full markdown/highlight
-// dependency chain for a local personal tool.
-function parseContent(content: string): ContentSegment[] {
-  const segments: ContentSegment[] = []
-  const regex = /```(\w*)\n?([\s\S]*?)```/g
-  let lastIndex = 0
-  let match: RegExpExecArray | null
-
-  while ((match = regex.exec(content))) {
-    if (match.index > lastIndex) segments.push({ type: 'text', text: content.slice(lastIndex, match.index) })
-    segments.push({ type: 'code', lang: match[1] || 'text', code: match[2].replace(/\n$/, '') })
-    lastIndex = regex.lastIndex
-  }
-  if (lastIndex < content.length) segments.push({ type: 'text', text: content.slice(lastIndex) })
-  return segments
-}
-
-function CodeBlock({ lang, code }: { lang: string; code: string }) {
-  const [copied, setCopied] = useState(false)
-
-  async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(code)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    } catch {
-      // Clipboard access can be blocked — nothing to fall back to here.
-    }
-  }
-
-  return (
-    <div className="code-block">
-      <div className="code-block-header">
-        <span>{lang}</span>
-        <button type="button" onClick={handleCopy}>
-          {copied ? 'Copied' : 'Copy'}
-        </button>
-      </div>
-      <pre>
-        <code>{code}</code>
-      </pre>
-    </div>
-  )
-}
-
-function MessageBody({ content }: { content: string }) {
-  const segments = parseContent(content)
-  return (
-    <>
-      {segments.map((segment, index) =>
-        segment.type === 'code' ? (
-          <CodeBlock key={index} lang={segment.lang} code={segment.code} />
-        ) : (
-          <p key={index}>{segment.text.trim()}</p>
-        ),
-      )}
-    </>
-  )
-}
-
-function useTheme() {
-  const [theme, setTheme] = useState<'light' | 'dark'>(() =>
-    window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
-  )
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme
-  }, [theme])
-
-  return { theme, toggle: () => setTheme((t) => (t === 'light' ? 'dark' : 'light')) }
-}
+import {
+  fetchInfo,
+  sendMessage,
+  resetConversation,
+  listConversations,
+  getConversationMessages,
+  activateConversation,
+  renameConversation,
+  deleteConversation,
+  type JarvisInfo,
+  type ConversationSummary,
+} from './api'
+import type { Message } from './types'
+import { useTheme } from './hooks/useTheme'
+import { useSidebarCollapsed } from './hooks/useSidebarCollapsed'
+import { Sidebar } from './components/Sidebar'
+import { Composer } from './components/Composer'
+import { EmptyState } from './components/EmptyState'
+import { MessageList } from './components/MessageList'
+import { ConfirmModal } from './components/ConfirmModal'
 
 function App() {
   const [info, setInfo] = useState<JarvisInfo | null>(null)
@@ -89,25 +26,40 @@ function App() {
   const [input, setInput] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [error, setError] = useState('')
+  const [conversations, setConversations] = useState<ConversationSummary[]>([])
+  const [activeConversationId, setActiveConversationId] = useState<string | undefined>(undefined)
+  const [pendingDelete, setPendingDelete] = useState<ConversationSummary | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { theme, toggle: toggleTheme } = useTheme()
+  const { collapsed: sidebarCollapsed, toggle: toggleSidebar } = useSidebarCollapsed()
 
   useEffect(() => {
     fetchInfo()
       .then(setInfo)
       .catch((err) => setError(err instanceof Error ? err.message : 'Could not reach Jarvis'))
+    refreshConversations()
   }, [])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isSending])
 
-  function autoResize() {
-    const el = textareaRef.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, 200)}px`
+  function refreshConversations() {
+    listConversations()
+      .then(setConversations)
+      .catch(() => {
+        // Best-effort — a stale sidebar list isn't worth surfacing as an error.
+      })
+  }
+
+  function applySuggestion(starter: string) {
+    setInput(starter)
+    requestAnimationFrame(() => {
+      const el = textareaRef.current
+      el?.focus()
+      el?.setSelectionRange(starter.length, starter.length)
+    })
   }
 
   async function handleSend() {
@@ -116,13 +68,14 @@ function App() {
 
     setMessages((prev) => [...prev, { role: 'user', content: text }])
     setInput('')
-    requestAnimationFrame(autoResize)
     setIsSending(true)
     setError('')
 
     try {
-      const reply = await sendMessage(text)
+      const { reply, conversationId } = await sendMessage(text)
       setMessages((prev) => [...prev, { role: 'assistant', content: reply }])
+      setActiveConversationId(conversationId)
+      refreshConversations()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {
@@ -134,101 +87,97 @@ function App() {
     try {
       await resetConversation()
       setMessages([])
+      setActiveConversationId(undefined)
       setError('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start a new conversation')
     }
   }
 
+  async function handleSelectConversation(id: string) {
+    if (id === activeConversationId || isSending) return
+    try {
+      await activateConversation(id)
+      const history = await getConversationMessages(id)
+      setMessages(history)
+      setActiveConversationId(id)
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not switch conversation')
+    }
+  }
+
+  async function handleRenameConversation(id: string, title: string) {
+    try {
+      await renameConversation(id, title)
+      refreshConversations()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not rename conversation')
+    }
+  }
+
+  async function confirmDeleteConversation() {
+    if (!pendingDelete) return
+    const id = pendingDelete.id
+    setPendingDelete(null)
+    try {
+      await deleteConversation(id)
+      if (id === activeConversationId) {
+        setMessages([])
+        setActiveConversationId(undefined)
+      }
+      refreshConversations()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete conversation')
+    }
+  }
+
+  const isEmptyConversation = messages.length === 0 && !error
+
   return (
     <div className="shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <img className="brand-mark" src="/logo.png" alt="" />
-          <span className="brand-name">{info?.assistantName ?? 'Hash AI'}</span>
-        </div>
-        <button type="button" className="new-chat" onClick={handleNewChat}>
-          + New chat
-        </button>
-        <div className="sidebar-footer">
-          {info && <span className="model-tag">{info.model}</span>}
-          <button type="button" className="theme-toggle" onClick={toggleTheme} aria-label="Toggle theme">
-            {theme === 'light' ? '🌙' : '☀️'}
-          </button>
-        </div>
-      </aside>
+      <Sidebar
+        info={info}
+        collapsed={sidebarCollapsed}
+        onToggleCollapsed={toggleSidebar}
+        conversations={conversations}
+        activeConversationId={activeConversationId}
+        onNewChat={handleNewChat}
+        onSelectConversation={handleSelectConversation}
+        onRenameConversation={handleRenameConversation}
+        onDeleteConversation={setPendingDelete}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
 
       <main className="conversation">
-        <div className="scroll-area">
-          {messages.length === 0 && !error && (
-            <div className="empty-state">
-              <img className="empty-mark" src="/logo.png" alt="" />
-              <p>How can I help you today?</p>
-            </div>
-          )}
-
-          {messages.map((message, index) =>
-            message.role === 'user' ? (
-              <div key={index} className="row user-row">
-                <div className="user-bubble">{message.content}</div>
-              </div>
-            ) : (
-              <div key={index} className="row assistant-row">
-                <img className="avatar" src="/logo.png" alt="" />
-                <div className="assistant-content">
-                  <MessageBody content={message.content} />
-                </div>
-              </div>
-            ),
-          )}
-
-          {isSending && (
-            <div className="row assistant-row">
-              <img className="avatar" src="/logo.png" alt="" />
-              <div className="assistant-content">
-                <span className="typing-dots">
-                  <i />
-                  <i />
-                  <i />
-                </span>
-              </div>
-            </div>
-          )}
-
-          <div ref={bottomRef} />
-        </div>
-
-        {error && <p className="error-banner">{error}</p>}
-
-        <form
-          className="composer"
-          onSubmit={(event) => {
-            event.preventDefault()
-            handleSend()
-          }}
-        >
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(event) => {
-              setInput(event.target.value)
-              autoResize()
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault()
-                handleSend()
-              }
-            }}
-            placeholder={`Message ${info?.assistantName ?? 'Jarvis'}…`}
-            rows={1}
-            autoFocus
+        {isEmptyConversation ? (
+          <EmptyState
+            input={input}
+            onInputChange={setInput}
+            onSend={handleSend}
+            isSending={isSending}
+            textareaRef={textareaRef}
+            onApplySuggestion={applySuggestion}
           />
-          <button type="submit" disabled={isSending || !input.trim()} aria-label="Send">
-            ↑
-          </button>
-        </form>
+        ) : (
+          <>
+            <MessageList messages={messages} isSending={isSending} bottomRef={bottomRef} />
+            {error && <p className="error-banner">{error}</p>}
+            <Composer input={input} onInputChange={setInput} onSend={handleSend} isSending={isSending} textareaRef={textareaRef} />
+          </>
+        )}
       </main>
+
+      {pendingDelete && (
+        <ConfirmModal
+          title="Delete conversation?"
+          message={`"${pendingDelete.title}" will be permanently deleted. This cannot be undone.`}
+          confirmLabel="Delete"
+          onConfirm={confirmDeleteConversation}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
     </div>
   )
 }

@@ -26,6 +26,9 @@ export interface JarvisConfig {
   // turn before it must stop and report back (see core/Jarvis.ts's
   // runAgentLoop). A safety bound, not a suggestion.
   maxAgentSteps: number
+  // Where the web UI's multi-conversation history lives (see
+  // memory/ConversationStore.ts). Web/API-layer only — the CLI doesn't use it.
+  conversationsDbPath: string
 }
 
 export function loadConfig(): JarvisConfig {
@@ -38,5 +41,6 @@ export function loadConfig(): JarvisConfig {
     workspaceRoot: process.env.JARVIS_WORKSPACE_ROOT ?? '.jarvis/workspace',
     auditLogPath: process.env.JARVIS_AUDIT_LOG ?? '.jarvis/audit.log',
     maxAgentSteps: Number(process.env.JARVIS_MAX_AGENT_STEPS ?? 5),
+    conversationsDbPath: process.env.JARVIS_CONVERSATIONS_DB ?? '.jarvis/conversations.sqlite',
   }
 }

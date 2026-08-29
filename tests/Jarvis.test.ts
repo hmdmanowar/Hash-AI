@@ -103,6 +103,42 @@ describe('Jarvis', () => {
     expect(() => jarvis.remember('x')).toThrow('Long-term memory is not configured')
   })
 
+  describe('loadHistory', () => {
+    it('replays the given messages into memory, feeding them into the next model request', async () => {
+      const model = new MockModel()
+      const jarvis = new Jarvis(model)
+
+      jarvis.loadHistory([
+        { role: 'user', content: 'earlier question' },
+        { role: 'assistant', content: 'earlier answer' },
+      ])
+      await jarvis.chat('follow-up')
+
+      const contents = model.receivedRequests[0].messages.map((m) => m.content)
+      expect(contents).toEqual(
+        expect.arrayContaining(['earlier question', 'earlier answer', 'follow-up']),
+      )
+    })
+
+    it('clears any pending tool call and trace, like reset()', async () => {
+      const sandbox = makeSandbox()
+      try {
+        const model = new ScriptedModel(['TOOL_CALL: {"tool": "run_command", "args": {"command": "echo hi"}}'])
+        const jarvis = new Jarvis(model, { toolRegistry: sandbox.toolRegistry, permissionEngine: sandbox.permissionEngine })
+
+        await jarvis.chat('run echo hi')
+        expect(jarvis.hasPendingToolCall()).toBe(true)
+
+        jarvis.loadHistory([])
+
+        expect(jarvis.hasPendingToolCall()).toBe(false)
+        expect(jarvis.getLastTrace()).toEqual([])
+      } finally {
+        sandbox.cleanup()
+      }
+    })
+  })
+
   describe('handleInput', () => {
     it('/remember stores a fact and confirms it', async () => {
       const jarvis = new Jarvis(new MockModel(), { longTermMemory: new LongTermMemory(':memory:') })
