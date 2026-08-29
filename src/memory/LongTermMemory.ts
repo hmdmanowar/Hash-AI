@@ -1,4 +1,17 @@
-import { DatabaseSync } from 'node:sqlite'
+import { mkdirSync } from 'node:fs'
+import { dirname } from 'node:path'
+import { createRequire } from 'node:module'
+
+// node:sqlite is a very new (experimental) Node built-in. vite-node (which
+// Vitest runs tests through) mishandles both static and dynamic `import`s
+// of it — it strips the "node:" prefix before actually loading the module,
+// and Node doesn't register a legacy unprefixed "sqlite" alias the way it
+// does for older built-ins, so that load then fails. A CommonJS require()
+// via createRequire is just an opaque function call to that transform
+// pipeline, so it isn't rewritten the same way.
+const require = createRequire(import.meta.url)
+const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite')
+type DatabaseSyncInstance = InstanceType<typeof DatabaseSync>
 
 export type MemoryType = 'fact' | 'preference' | 'decision' | 'goal'
 
@@ -10,8 +23,9 @@ export interface MemoryRecord {
 }
 
 const STOPWORDS = new Set([
-  'a', 'an', 'and', 'are', 'as', 'at', 'be', 'but', 'by', 'for', 'i', 'in', 'is', 'it',
-  'my', 'of', 'on', 'or', 'that', 'the', 'to', 'was', 'what', 'with', 'you',
+  'a', 'an', 'and', 'are', 'as', 'at', 'be', 'but', 'by', 'do', 'does', 'for', 'i', 'in',
+  'is', 'it', 'my', 'of', 'on', 'or', 'should', 'that', 'the', 'to', 'use', 'user', 'was',
+  'what', 'with', 'you',
 ])
 
 function tokenize(text: string): string[] {
@@ -28,9 +42,10 @@ function tokenize(text: string): string[] {
 // matches the roadmap's own "vector retrieval when needed" phasing; this is
 // the "not needed yet" starting point.
 export class LongTermMemory {
-  private readonly db: DatabaseSync
+  private readonly db: DatabaseSyncInstance
 
   constructor(path: string) {
+    if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true })
     this.db = new DatabaseSync(path)
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS memories (

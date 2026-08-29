@@ -12,6 +12,9 @@ export interface JarvisConfig {
   // 127.0.0.1 — there's no auth yet, so this must never be exposed on the
   // network.
   apiPort: number
+  // Where persistent long-term memory lives (see memory/LongTermMemory.ts).
+  // Relative to wherever the process is started from.
+  memoryDbPath: string
 }
 
 export function loadConfig(): JarvisConfig {
@@ -20,5 +23,6 @@ export function loadConfig(): JarvisConfig {
     model: process.env.JARVIS_MODEL ?? 'qwen2.5-coder',
     assistantName: process.env.JARVIS_NAME ?? 'Jarvis',
     apiPort: Number(process.env.JARVIS_API_PORT ?? 4000),
+    memoryDbPath: process.env.JARVIS_MEMORY_DB ?? '.jarvis/memory.sqlite',
   }
 }

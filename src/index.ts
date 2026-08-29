@@ -4,6 +4,8 @@
 export { Jarvis } from './core/Jarvis.js'
 export type { JarvisOptions } from './core/Jarvis.js'
 export { ShortTermMemory } from './memory/ShortTermMemory.js'
+export { LongTermMemory } from './memory/LongTermMemory.js'
+export type { MemoryType, MemoryRecord } from './memory/LongTermMemory.js'
 export { OllamaModel } from './models/OllamaModel.js'
 export { loadConfig } from './config/config.js'
 export type { JarvisConfig } from './config/config.js'

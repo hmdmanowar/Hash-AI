@@ -1,17 +1,20 @@
 import readline from 'node:readline'
 import { loadConfig } from '../config/config.js'
 import { OllamaModel } from '../models/OllamaModel.js'
+import { LongTermMemory } from '../memory/LongTermMemory.js'
 import { Jarvis } from '../core/Jarvis.js'
 
 async function main() {
   const config = loadConfig()
   const jarvis = new Jarvis(new OllamaModel(config.ollamaHost, config.model), {
     assistantName: config.assistantName,
+    longTermMemory: new LongTermMemory(config.memoryDbPath),
   })
   const label = jarvis.getAssistantName().toLowerCase()
 
   console.log(`${jarvis.getAssistantName()} v0.1 — model: ${config.model} (${config.ollamaHost})`)
-  console.log("Type a message and press Enter. Ctrl+C to quit.\n")
+  console.log("Type a message and press Enter. Ctrl+C to quit.")
+  console.log("Commands: /remember <text>, /memories, /forget <id>\n")
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout, prompt: 'you> ' })
   rl.prompt()
@@ -23,7 +26,7 @@ async function main() {
       return
     }
     try {
-      const reply = await jarvis.chat(input)
+      const reply = await jarvis.handleInput(input)
       console.log(`${label}> ${reply}\n`)
     } catch (error) {
       console.error(`error> ${error instanceof Error ? error.message : String(error)}\n`)

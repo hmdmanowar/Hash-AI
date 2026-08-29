@@ -1,6 +1,7 @@
 import http from 'node:http'
 import { loadConfig } from '../config/config.js'
 import { OllamaModel } from '../models/OllamaModel.js'
+import { LongTermMemory } from '../memory/LongTermMemory.js'
 import { Jarvis } from '../core/Jarvis.js'
 
 // A plain node:http server — no framework dependency, matching the
@@ -11,6 +12,7 @@ import { Jarvis } from '../core/Jarvis.js'
 const config = loadConfig()
 const jarvis = new Jarvis(new OllamaModel(config.ollamaHost, config.model), {
   assistantName: config.assistantName,
+  longTermMemory: new LongTermMemory(config.memoryDbPath),
 })
 
 function send(res: http.ServerResponse, status: number, body?: unknown) {
@@ -48,7 +50,7 @@ const server = http.createServer(async (req, res) => {
         send(res, 400, { error: 'Request body must include a non-empty "message" string' })
         return
       }
-      const reply = await jarvis.chat(body.message)
+      const reply = await jarvis.handleInput(body.message)
       send(res, 200, { reply })
       return
     }
